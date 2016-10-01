@@ -1,0 +1,132 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Jiahe Yu"
+date: "September 30, 2016"
+output: html_document
+---
+
+## 1. Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+In this project, I use data from accelerometers on the belt, forearm, arm, and dumbell of participants. Participants were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+I predict the manner in which people did the exercise. This report presents how I build the model, how I used cross validation, the expected out of sample error, and why I made the choices. 
+
+## 2. Load the datasets and packages
+
+The data for this project come from this source: [http://groupware.les.inf.puc-rio.br/har](http://groupware.les.inf.puc-rio.br/har)[1].
+
+The training data for this project are available here:
+
+[https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv)
+
+The test data are available here:
+
+[https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
+
+### 2.1 load the data
+
+```{r, cache = TRUE, results = "hide"}
+download.file(url = "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", 
+              destfile = "training.csv")
+download.file(url = "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", 
+              destfile = "testing.csv")
+train <- read.csv("training.csv", na.strings = c("NA", ""))
+test <- read.csv("testing.csv", na.strings = c("NA", ""))
+```
+
+### 2.2 load the packages that I would use
+
+```{r, cache = TRUE, results = "hide", warning = F, message = F}
+library(caret)
+library(gbm)
+```
+
+## 3. Data Preparation
+
+### 3.1 initial look at the data
+
+```{r, cache = T, results = "hide"}
+dim(train)
+names(train)
+str(train)
+head(train, 5) # Results are hidden for the purpose of being concise
+```
+
+### 3.2 clean the data
+
+```{r, cache = T, results = "hide"}
+train <- train[, -c(1:7)] # the first seven variables are not useful in the analysis so I delete them
+test <- test[, -c(1:7)] # do the same thing for the train data
+train <- train[, colSums(is.na(train)) == 0] # delete variables that contain missing values
+test <- test[, colSums(is.na(test)) == 0] # do the same thing for the train data
+```
+
+### 3.3 partrition the training data 
+
+Now we have a clean training dataset with 53 variables and 19622 observations and a clean test dataset with 53 variables and 20 observations. Here I partrition the training data into a sub-training dataset and a sub-test dataset to perform cross-validation.
+
+```{r, cache = T, results = "hide"}
+set.seed(929)
+index <- createDataPartition(train$classe, p = 0.7, list = F)
+subtrain <- train[index, ]
+subtest <- train[-index, ]
+```
+
+### 3.4 clean up near zero variance features
+
+```{r, cache = T, results = "hide"}
+nzv <- nearZeroVar(subtrain, saveMetrics = T)
+subtrain <- subtrain [nzv$nzv == FALSE] # delete the near zero variance features
+subtest <- subtest[nzv$nzv == FALSE] # did the same as for the subtrain data
+test <- test[nzv$nzv == FALSE] # did the same as for the subtrain data
+```
+
+## 4. Exploratory Data Analysis 
+
+```{r, cache = T}
+plot(subtrain$classe, xlab = "Levels of Classe", ylab = "Frequency",
+     main = "Frequency of Classe Levels in Subtrain Dataset") # Our dependent variable classes has five levels (A, B, C, D, E).
+```
+
+```{r, cache = T, results = "hide"}
+summary(subtrain) # check summary statistics of all the variables in the subtrain dataset. The results are hidden for the purpose of being concise
+```
+
+## 5. Train Models
+
+### 5.1 Use three different methods to train models
+
+```{r, cache = T, results = "hide", warning = F, message = F}
+md_rf <- train(classe ~ ., data = subtrain, method = "rf") # use the method of "random forest"
+md_gbm <- train(classe ~ ., data = subtrain, method = "gbm") # use the method of "boosting"
+md_lda <- train(classe ~ ., data = subtrain, method = "lda") # use "linear discriminant analysis"
+```
+
+### 5.2 Model Selection and Out-of-sample Error
+
+```{r, cache = T}
+pred_rf <- predict(md_rf, subtest)
+pred_gbm <- predict(md_gbm, subtest)
+pred_lda <- predict(md_lda, subtest)
+
+confusionMatrix(pred_rf, subtest$classe)
+confusionMatrix(pred_gbm, subtest$classe)
+confusionMatrix(pred_lda, subtest$classe)
+```
+
+#### **Conclusion: The above results suggest that random forest algorithm performed better than the other two methods because it provides the highest accuracy among all the predictions. The test results show that the accuracy for the random forest model is 0.9947 (95%CI:(0.9925, 0.9964)), so the expected out-of-sample error is estimated at around 0.5%, which implies that this prediction performs rather good.**
+
+## 6. Prediction of Classe in Test Data
+
+Based on the random forest model that I chose in the training data, I did final calculations and predict the manner in which people did the exercise in the testing data.
+
+```{r, cache = T}
+pred_test <- predict(md_rf, test)
+print(pred_test) # the answers for the quiz
+```
+
+## *Reference*
+
+[1] Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
